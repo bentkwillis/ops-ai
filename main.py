@@ -45,27 +45,10 @@ def close_ssh_connection(host:str):
     subprocess.run([
         "ssh",
         "-S", CONTROL_PATH,
-        "-)", "exit",
+        "-O", "exit",
         host
     ])
 
-def validate_response(data):
-    if not isinstance(data, dict):
-        return False
-
-    required_fields = ["analysis", "next_command", "reason", "confidence"]
-
-    for field in required_fields:
-        if field not in data:
-            return False
-
-    if not isinstance(data["next_command"], str):
-        return False
-
-    if not isinstance(data["confidence"], (int, float)):
-        return False
-
-    return True
 
 
 def main():
@@ -90,14 +73,19 @@ def main():
             for attempt in range(2):
                 llm_response = call_llm(state, user_input)
 
-                print("\nLLM RESPONSE:")
-                print(llm_response)
-
                 try:
                     candidate = json.loads(llm_response)
 
                     if validate_response(candidate):
                         parsed = candidate
+
+                        print("\nAnalysis:")
+                        print(parsed["analysis"])
+
+                        print("\nPlan:")
+                        for i, step in enumerate(parsed["plan"], start=1):
+                            print(f"{i}. {step}")
+
                         break
 
                 except json.JSONDecodeError:
@@ -110,6 +98,9 @@ def main():
             cmd = parsed["next_command"]
 
             print(f"\nProposed command: {cmd}")
+            print(f"Reason: {parsed['reason']}")
+            print(f"Confidence: {parsed['confidence']}")
+
             approval = input("Run this command? (y/edit/n): ")
 
             if approval == "n":

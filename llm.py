@@ -35,13 +35,18 @@ def build_prompt(state, user_input):
         for h in state["history"][-3:]
     ])
 
+    if not history:
+        history = "No commands have been run yet."
+
     return f"""
-    User problem:
-    {user_input}
+User problem:
+{user_input}
 
-    Recent investigation:
-    {history}
+Recent investigation history:
+{history}
 
-    What is the next best command?
-    """
-
+Your task:
+1. Analyse the current situation
+2. Produce a short 3-step investigation plan
+3. Propose the single best next command to run now
+"""
