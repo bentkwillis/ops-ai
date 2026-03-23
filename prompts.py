@@ -23,4 +23,16 @@ Rules:
 - Prefer safe, read-only commands first
 - Avoid sudo unless absolutely necessary
 - Base your reasoning on the user's problem and the investigation history
+
+
+You must also return:
+- done (boolean)
+
+Set done=true when:
+- you have enough information
+- the issue is understood
+- no further commands are needed
+
+If done=true:
+- next_command must be empty
 """

@@ -29,4 +29,10 @@ def validate_response(data):
     if not isinstance(data["confidence"], (int, float)):
         return False
     
+    if "done" not in data:
+        return False
+    
+    if not isinstance(data["done"], bool):
+        return False
+    
     return True

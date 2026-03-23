@@ -68,58 +68,74 @@ def main():
             if user_input.lower() in ["exit", "quit"]:
                 break
 
-            parsed = None
+            state["history"] = []
 
-            for attempt in range(2):
-                llm_response = call_llm(state, user_input)
+            MAX_STEPS = 5
 
-                try:
-                    candidate = json.loads(llm_response)
+            for step in range(MAX_STEPS):
+                print(f"\n--- Step {step + 1} ---")
 
-                    if validate_response(candidate):
-                        parsed = candidate
+                parsed = None
 
-                        print("\nAnalysis:")
-                        print(parsed["analysis"])
+                for attempt in range(2):
+                    llm_response = call_llm(state, user_input)
 
-                        print("\nPlan:")
-                        for i, step in enumerate(parsed["plan"], start=1):
-                            print(f"{i}. {step}")
+                    try:
+                        candidate = json.loads(llm_response)
 
+                        if validate_response(candidate):
+                            parsed = candidate
+
+                            print("\nAnalysis:")
+                            print(parsed["analysis"])
+
+                            print("\nPlan:")
+                            for i, step_text in enumerate(parsed["plan"], start=1):
+                                print(f"{i}. {step_text}")
+
+                            break
+
+                    except json.JSONDecodeError:
+                        print("Invalid JSON, retrying...")
+
+                if parsed is None:
+                    print("LLM failed to produce valid output")
+                    break
+
+                if parsed["done"]:
+                    print("\nAnalysis:")
+                    print(parsed["analysis"])
+
+                    print("\n✅ Investigation complete")
+                    break
+
+                cmd = parsed["next_command"]
+
+                print(f"\nProposed command: {cmd}")
+                print(f"Reason: {parsed['reason']}")
+                print(f"Confidence: {parsed['confidence']}")
+
+                approval = input("Run this command? (y/edit/n): ")
+
+                if approval == "n":
+                    print("Stopping investigation")
+                    break
+                elif approval == "edit":
+                    cmd = input("Enter command: ")
+
+                if is_dangerous(cmd):
+                    print("⚠️ Potentially dangerous command detected")
+                    print(f"Command: {cmd}")
+                    override = input("Run anyway? (y/n): ")
+                    if override != "y":
+                        print("Blocked dangerous command, stopping investigation")
                         break
+                output = run_ssh_command(host, cmd)
 
-                except json.JSONDecodeError:
-                    print("Invalid JSON, retrying...")
-
-            if parsed is None:
-                print("LLM failed to produce valid output")
-                continue
-
-            cmd = parsed["next_command"]
-
-            print(f"\nProposed command: {cmd}")
-            print(f"Reason: {parsed['reason']}")
-            print(f"Confidence: {parsed['confidence']}")
-
-            approval = input("Run this command? (y/edit/n): ")
-
-            if approval == "n":
-                continue
-            elif approval == "edit":
-                cmd = input("Enter command: ")
-
-            if is_dangerous(cmd):
-                print("⚠️ Potentially dangerous command detected")
-                print(f"Command: {cmd}")
-                override = input("Run anyway? (y/n): ")
-                if override != "y":
-                    continue
-            output = run_ssh_command(host, cmd)
-
-            state["history"].append({
-                "command": cmd,
-                "output": output
-            })
+                state["history"].append({
+                    "command": cmd,
+                    "output": output
+                })
 
     finally:
         print("Closing connection...")
