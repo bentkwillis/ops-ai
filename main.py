@@ -4,6 +4,7 @@ import os
 from llm import call_llm
 import json
 from validation import validate_response
+from policy import is_dangerous
 
 CONTROL_PATH = "/tmp/ops_ai_ssh_%h_%p_%r"
 
@@ -116,6 +117,12 @@ def main():
             elif approval == "edit":
                 cmd = input("Enter command: ")
 
+            if is_dangerous(cmd):
+                print("⚠️ Potentially dangerous command detected")
+                print(f"Command: {cmd}")
+                override = input("Run anyway? (y/n): ")
+                if override != "y":
+                    continue
             output = run_ssh_command(host, cmd)
 
             state["history"].append({
