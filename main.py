@@ -71,71 +71,101 @@ def main():
             state["history"] = []
 
             MAX_STEPS = 5
+            continue_agent = True
 
-            for step in range(MAX_STEPS):
-                print(f"\n--- Step {step + 1} ---")
+            while continue_agent:
 
-                parsed = None
+                for step in range(MAX_STEPS):
+                    print(f"\n--- Step {step + 1} ---")
 
-                for attempt in range(2):
-                    llm_response = call_llm(state, user_input)
+                    parsed = None
 
-                    try:
-                        candidate = json.loads(llm_response)
+                    for attempt in range(2):
+                        llm_response = call_llm(state, user_input)
 
-                        if validate_response(candidate):
-                            parsed = candidate
+                        try:
+                            candidate = json.loads(llm_response)
 
-                            print("\nAnalysis:")
-                            print(parsed["analysis"])
+                            if validate_response(candidate):
+                                parsed = candidate
 
-                            print("\nPlan:")
-                            for i, step_text in enumerate(parsed["plan"], start=1):
-                                print(f"{i}. {step_text}")
+                                print("\nAnalysis:")
+                                print(parsed["analysis"])
 
+                                print("\nPlan:")
+                                for i, step_text in enumerate(parsed["plan"], start=1):
+                                    print(f"{i}. {step_text}")
+
+                                break
+
+                        except json.JSONDecodeError:
+                            print("Invalid JSON, retrying...")
+
+                    if parsed is None:
+                        print("LLM failed to produce valid output")
+                        continue_agent = False
+                        break
+
+                    if parsed["done"]:
+                        print("\n--- FINAL SUMMARY ---")
+                        print(parsed["analysis"])
+
+                        print("\n✅ Investigation complete")
+                        continue_agent = False
+                        break
+
+                    cmd = parsed["next_command"]
+
+                    print(f"\nProposed command: {cmd}")
+                    print(f"Reason: {parsed['reason']}")
+                    print(f"Confidence: {parsed['confidence']}")
+
+                    approval = input("Run this command? (y/edit/n): ")
+
+                    if approval == "n":
+                        print("Stopping investigation")
+                        continue_agent = False
+                        break
+                    elif approval == "edit":
+                        cmd = input("Enter command: ")
+
+                    if is_dangerous(cmd):
+                        print("⚠️ Potentially dangerous command detected")
+                        print(f"Command: {cmd}")
+                        override = input("Run anyway? (y/n): ")
+                        if override != "y":
+                            print("Blocked dangerous command, stopping investigation")
+                            continue_agent = False
                             break
 
-                    except json.JSONDecodeError:
-                        print("Invalid JSON, retrying...")
+                    output = run_ssh_command(host, cmd)
 
-                if parsed is None:
-                    print("LLM failed to produce valid output")
-                    break
+                    state["history"].append({
+                        "command": cmd,
+                        "output": output
+                    })
 
-                if parsed["done"]:
-                    print("\nAnalysis:")
-                    print(parsed["analysis"])
+                else:
+                    print("\n⚠️ Investigation running for a while...")
 
-                    print("\n✅ Investigation complete")
-                    break
+                    summary_prompt = """
+                    Summarise the investigation so far.
 
-                cmd = parsed["next_command"]
+                    Include:
+                    - key findings
+                    - likely root cause
+                    - recommended next steps
+                    """
 
-                print(f"\nProposed command: {cmd}")
-                print(f"Reason: {parsed['reason']}")
-                print(f"Confidence: {parsed['confidence']}")
+                    summary = call_llm(state, summary_prompt)
 
-                approval = input("Run this command? (y/edit/n): ")
+                    print("\n--- SUMMARY ---")
+                    print(summary)
 
-                if approval == "n":
-                    print("Stopping investigation")
-                    break
-                elif approval == "edit":
-                    cmd = input("Enter command: ")
+                    decision = input("\nContinue investigating based on current findings? (y/n): ")
 
-                if is_dangerous(cmd):
-                    print("⚠️ Potentially dangerous command detected")
-                    print(f"Command: {cmd}")
-                    override = input("Run anyway? (y/n): ")
-                    if override != "y":
-                        print("Blocked dangerous command, stopping investigation")
-                        break
-                output = run_ssh_command(host, cmd)
-
-                state["history"].append({
-                    "command": cmd,
-                    "output": output
-                })
+                    if decision.lower() != "y":
+                        continue_agent = False
 
     finally:
         print("Closing connection...")
